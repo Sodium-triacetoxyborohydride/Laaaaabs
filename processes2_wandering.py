@@ -1,94 +1,152 @@
-import numpy as np
-import matplotlib.pyplot as plt
 import random
+import matplotlib.pyplot as plt
 
-# Генерация матрицы вероятностей переходов с учетом ограничений
-def generate_transition_matrix(size):
-    matrix = [[[0] * 4 for _ in range(size)] for _ in range(size)]
-    for x in range(size):
-        for y in range(size):
-            directions = []
-            if x > 0:  # Влево
-                directions.append(0)
-            if x < size - 1:  # Вправо
-                directions.append(1)
-            if y > 0:  # Вверх
-                directions.append(2)
-            if y < size - 1:  # Вниз
-                directions.append(3)
 
-            probability_sum = 100
-            random.shuffle(directions)
-            for d in directions[:-1]:
-                probability = random.randint(0, probability_sum)
-                matrix[x][y][d] = probability / 100.0
-                probability_sum -= probability
+class GridWalkSimulator:
+    def __init__(self, grid_size):
+        self.grid_size = grid_size
+        self.transition_probabilities = self._initialize_probabilities()
+        self.sensor_location = self._place_sensor()
 
-            # Убедиться, что сумма вероятностей равна 1
-            matrix[x][y][directions[-1]] = probability_sum / 100.0
+    def _initialize_probabilities(self):
+        # Создание матрицы перехода вероятностей для каждого узла
+        probabilities = {}
 
-    return matrix
+        for x in range(self.grid_size):
+            for y in range(self.grid_size):
+                probabilities[(x, y)] = self._generate_probabilities(x, y)
 
-# Выбор случайной позиции, исключая указанную
-def select_random_position(size, exclude=None):
-    while True:
-        pos = (random.randint(0, size - 1), random.randint(0, size - 1))
-        if pos != exclude:
-            return pos
+        return probabilities
 
-# Реализация случайного блуждания
-def perform_random_walk(size, transition_matrix, start_pos, end_pos):
-    steps = 0
-    current_pos = start_pos
-    path = [current_pos]
+    def _generate_probabilities(self, x, y):
+        # Генерация вероятностей для одного узла сетки
+        moves = []
+        if x > 0: moves.append('left')
+        if x < self.grid_size - 1: moves.append('right')
+        if y > 0: moves.append('up')
+        if y < self.grid_size - 1: moves.append('down')
 
-    directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]  # направления: влево, вправо, вверх, вниз
+        random.shuffle(moves)
+        probs = {direction: 0 for direction in ['left', 'right', 'up', 'down']}
+        remaining = 100
 
-    while current_pos != end_pos:
-        i, j = current_pos
-        move = random.choices(range(4), weights=transition_matrix[i][j])[0]  # выбор направления на основе вероятностей
-        ni, nj = i + directions[move][0], j + directions[move][1]
+        for move in moves[:-1]:
+            prob = random.randint(0, remaining)
+            probs[move] = prob / 100.0
+            remaining -= prob
 
-        # проверка выхода за границы
-        if 0 <= ni < size and 0 <= nj < size:
-            current_pos = (ni, nj)
-            path.append(current_pos)
-            steps += 1
+        if moves:
+            probs[moves[-1]] = remaining / 100.0
 
-    return steps, path
+        return probs
 
-# Проведение эксперимента
-def conduct_experiment(size, num_animals):
-    transition_matrix = generate_transition_matrix(size)
+    def _place_sensor(self):
+        # Устанавливает датчик в случайное положение на сетке
+        return (random.randint(0, self.grid_size - 1), random.randint(0, self.grid_size - 1))
 
-    end_pos = select_random_position(size)
-    steps_list = []
+    def simulate_walk(self, start_position):
+        # Симуляция одного блуждания от стартовой позиции до датчика
+        position = start_position
+        steps_taken = 0
+        path = [position]
 
-    for _ in range(num_animals):
-        start_pos = select_random_position(size, exclude=end_pos)
-        steps, path = perform_random_walk(size, transition_matrix, start_pos, end_pos)
-        steps_list.append(steps)
+        while position != self.sensor_location:
+            steps_taken += 1
+            position = self._move_animal(position)
+            path.append(position)
 
-    plt.hist(steps_list, bins=30, edgecolor='black')
-    plt.title('Histogram of Steps to Reach Sensor')
-    plt.xlabel('Steps')
-    plt.ylabel('Frequency')
-    plt.show()
+        return steps_taken, path
 
-    # Визуализация пути первого животного
-    if size <= 10:
-        plt.figure(figsize=(6, 6))
-        for i in range(len(path) - 1):
-            plt.plot([path[i][1], path[i + 1][1]], [path[i][0], path[i + 1][0]], 'bo-')
-        plt.plot(end_pos[1], end_pos[0], 'ro', label='Sensor')
-        plt.plot(path[0][1], path[0][0], 'go', label='Start')
-        plt.gca().invert_yaxis()
-        plt.xlim(-1, size)
-        plt.ylim(-1, size)
+    def _move_animal(self, position):
+        # Определяет следующее положение животного на сетке
+        x, y = position
+        directions = self.transition_probabilities[(x, y)]
+        move = random.choices(list(directions.keys()), weights=directions.values())[0]
+
+        if move == 'left':
+            x -= 1
+        elif move == 'right':
+            x += 1
+        elif move == 'up':
+            y -= 1
+        elif move == 'down':
+            y += 1
+
+        return (x, y)
+
+    def conduct_experiments(self, num_experiments):
+        # Проводит несколько экспериментов и возвращает результаты
+        outcomes = []
+        example_path = None
+
+        for i in range(num_experiments):
+            start = self._generate_start_position()
+            steps, path = self.simulate_walk(start)
+
+            if i == 0:
+                example_path = path
+                # Вывод информации о первой симуляции
+                print(f"Датчик расположен в: {self.sensor_location}")
+                print(f"Начальная позиция животного: {start}")
+                print(f"Количество шагов до датчика: {steps}")
+
+            outcomes.append(steps)
+
+        return outcomes, example_path
+
+    def _generate_start_position(self):
+        # Генерация начальной позиции, отличной от позиции датчика
+        while True:
+            start = (random.randint(0, self.grid_size - 1), random.randint(0, self.grid_size - 1))
+            if start != self.sensor_location:
+                return start
+
+
+class ResultVisualizer:
+    @staticmethod
+    def plot_histogram(attempts):
+        # Построение гистограммы попыток
+        plt.hist(attempts, bins=20, edgecolor='black')
+        plt.title('Гистограмма шагов до достижения датчика')
+        plt.xlabel('Количество шагов')
+        plt.ylabel('Частота')
+
+    @staticmethod
+    def plot_path(grid_size, sensor, path):
+        # Визуализация пути одного блуждания
+        plt.xlim(-1, grid_size)
+        plt.ylim(-1, grid_size)
         plt.grid(True)
+        plt.title('Путь случайного блуждания')
+
+        sensor_x, sensor_y = sensor
+        plt.plot(sensor_x, sensor_y, 'ro', label='Датчик', markersize=10)
+
+        if path:
+            path_x, path_y = zip(*path)
+            plt.plot(path_x, path_y, marker='o', color='b', label='Путь')
+            plt.plot(path_x[0], path_y[0], 'go', label='Старт')
+
         plt.legend()
-        plt.title('Path of an Animal')
+
+    @staticmethod
+    def display(grid_size, attempts, sensor, path):
+        plt.figure(figsize=(10, 5))
+        plt.subplot(1, 2, 1)
+        ResultVisualizer.plot_histogram(attempts)
+        plt.subplot(1, 2, 2)
+        ResultVisualizer.plot_path(grid_size, sensor, path)
+        plt.tight_layout()
         plt.show()
 
-# Запуск эксперимента с заданными параметрами
-conduct_experiment(size=25, num_animals=100)
+
+# Параметры
+size_of_grid = 25
+number_of_trials = 100
+
+# Инициализация симулятора и проведение экспериментов
+simulator = GridWalkSimulator(size_of_grid)
+results, path_example = simulator.conduct_experiments(number_of_trials)
+
+# Визуализация результатов
+ResultVisualizer.display(size_of_grid, results, simulator.sensor_location, path_example)
