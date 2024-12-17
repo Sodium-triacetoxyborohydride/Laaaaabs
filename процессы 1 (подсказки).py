@@ -37,7 +37,6 @@ def build_markov_chain(words):
 
 
 def generate_suggestion(chain, chain_first_order, input_words):
-    # Попытка использовать биграммы, а затем униграммы
     if len(input_words) >= 2:
         last_bigram = (input_words[-2], input_words[-1])
         if last_bigram in chain:
